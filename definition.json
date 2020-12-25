@@ -1,0 +1,134 @@
+[
+  {
+    "id": "apm",
+    "body": {
+      "description": "Default enrichment for APM events",
+      "processors": [
+        {
+          "pipeline": {
+            "name": "apm_user_agent"
+          }
+        },
+        {
+          "pipeline": {
+            "name": "apm_user_geo"
+          }
+        },
+        {
+          "pipeline": {
+            "name": "apm_ingest_timestamp"
+          }
+        },
+        {
+          "pipeline": {
+            "name": "apm_remove_span_metadata"
+          }
+        },
+        {
+          "pipeline": {
+            "name": "apdex"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "apm_user_agent",
+    "body": {
+      "description": "Add user agent information for APM events",
+      "processors": [
+        {
+          "user_agent": {
+            "field": "user_agent.original",
+            "target_field": "user_agent",
+            "ignore_missing": true,
+            "ignore_failure": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "apm_user_geo",
+    "body": {
+      "description": "Add user geo information for APM events",
+      "processors": [
+        {
+          "geoip": {
+            "database_file": "GeoLite2-City.mmdb",
+            "field": "client.ip",
+            "target_field": "client.geo",
+            "ignore_missing": true,
+            "on_failure": [
+              {
+                "remove": {
+                  "field": "client.ip",
+                  "ignore_missing": true,
+                  "ignore_failure": true
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "apm_ingest_timestamp",
+    "body": {
+      "description": "Add an ingest timestamp for APM events",
+      "processors": [
+        {
+          "set": {
+            "if": "ctx.processor?.event != 'span'",
+            "field": "event.ingested",
+            "value": "{{_ingest.timestamp}}"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "apm_remove_span_metadata",
+    "body": {
+      "description": "Removes metadata fields available already on the parent transaction, to save storage",
+      "processors": [
+        {
+          "remove": {
+            "if": "ctx.processor?.event == 'span'",
+            "field": [
+              "host",
+              "process",
+              "user",
+              "user_agent",
+              "container",
+              "kubernetes",
+              "service.node",
+              "service.version",
+              "service.language",
+              "service.runtime",
+              "service.framework"
+            ],
+            "ignore_missing": true,
+            "ignore_failure": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "apdex",
+    "body": {
+      "description": "Calculate apdex",
+      "processors": [
+        {
+          "script": {
+            "lang": "painless",
+            "ignore_failure": true,
+            "source": " double apdex_t = 800.0 * 1000.0; if (ctx.labels==null) {ctx.labels = [:];} if (ctx.transaction.duration.us <= apdex_t) { ctx.labels.apdexscore=1.0; } else if (ctx.transaction.duration.us <= (apdex_t * 4)) { ctx.labels.apdexscore=0.5; } else { ctx.labels.apdexscore=0.0; } "
+          }
+        }
+      ]
+    }
+  }
+]
